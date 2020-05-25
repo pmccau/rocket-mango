@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"strings"
@@ -14,8 +15,9 @@ import (
 )
 
 var token string
-var buffer = make(*[][]byte, 0)
+var buffer = make([][]byte, 0)
 var validCmds map[string]string
+var count int
 
 // This function will be called (due to AddHandler above) when the bot receives
 // the "ready" event from Discord
@@ -63,8 +65,7 @@ func loadSound(pathToFile string) error {
 			fmt.Println(err)
 			return err
 		}
-		newBuff := append(*buffer, InBuf)
-		buffer = &newBuff
+		buffer = append(buffer, InBuf)
 	}
 }
 
@@ -86,9 +87,18 @@ func playSound(s *discordgo.Session, guildID, channelID string) (err error) {
 
 	//fmt.Printf("Buffer is of size: [%d][%d]")
 	// Send buffer data
-	for _, buff := range *buffer {
-		vc.OpusSend <- buff
+	//for i, buff := range buffer {
+	//	fmt.Printf("[%d]\tLength %d\n", i, len(buff))
+	//	vc.OpusSend <- buff
+	//}
+
+	for i := count; i < len(buffer); i++ {
+		vc.OpusSend <- buffer[i]
 	}
+	count = len(buffer)
+
+	//vc.OpusSend <- buffer[count]
+	//count++
 
 	// Stop speaking
 	vc.Speaking(false)
@@ -170,12 +180,17 @@ func init() {
 	flag.Parse()
 }
 
-func main() {
-	token = "NzE0MTcwMzQ2Nzg5NDA0Nzc0.Xsq1Kg.t7Ts_Hdp1HZ2A4fxHSXXNA7oGGU"
-	if token == "" {
-		fmt.Println("Please provide a token with -t")
-		return
+func readToken(pathToFile string) string {
+	contents, err := ioutil.ReadFile(pathToFile)
+	if err != nil {
+		panic(err)
 	}
+	return string(contents)
+}
+
+
+func main() {
+	token = readToken("creds.pickle")
 
 	validCmds = make(map[string]string, 0)
 	validCmds["!airhorn"] = "./sounds/airhorn.dca"
