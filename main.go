@@ -8,10 +8,9 @@ import (
 	"github.com/pmccau/rocket-mango/tools"
 	"io"
 	"io/ioutil"
-	"log"
-	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -27,7 +26,7 @@ var stagingFolder = "sounds/staging"
 // This function will be called (due to AddHandler above) when the bot receives
 // the "ready" event from Discord
 func ready(s *discordgo.Session, event *discordgo.Ready) {
-	s.UpdateStatus(0, "!help for commands")
+	s.UpdateStatus(0, "!help")
 }
 
 // loadSound attempts to load an encoded sound file from disk.
@@ -111,6 +110,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	// Check for newsound command, download attachment
 	if strings.HasPrefix(m.Content, "!newsound") {
+		ParseExistingSounds() // Redo the parsing to be sure it's current, no deletions
 		fmt.Println("Attachments", m.Attachments)
 		for _, att := range m.Attachments {
 			splitStr := tools.SplitByNonWord(att.Filename)
@@ -124,16 +124,22 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			tools.DownloadFile(saveLocation, att.URL)
 			dcaLocation := tools.ConvertToDCA(saveLocation, dcaFolder)
 			RegisterCommand(filename, dcaLocation)
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Successfully added !%s", filename))
+			os.Remove(saveLocation)
+			fmt.Println("Deleted file at", saveLocation)
 		}
 	}
 
 	// Help message
 	if strings.HasPrefix(m.Content, "!help") {
+		ParseExistingSounds() // Redo the parsing to be sure it's current, no deletions
 		keys := make([]string, 0)
 		for k := range validCmds {
 			keys = append(keys, k)
 		}
 		content := "You can ask me to play the following sounds:"
+		sort.Strings(keys)
+
 		content = fmt.Sprintf("%s\n%s", content, strings.Join(keys, ", "))
 		s.ChannelMessageSend(m.ChannelID, content)
 	}
@@ -141,6 +147,8 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// Check for valid command
 	for k, v := range validCmds {
 		if strings.HasPrefix(m.Content, k) {
+			ParseExistingSounds() // Redo the parsing to be sure it's current, no deletions
+
 			err := loadSound(v)
 			if err != nil {
 				panic(err)
@@ -215,9 +223,10 @@ func RegisterCommand(command string, file string) bool {
 func ParseExistingSounds() int {
 	dcaFiles := tools.GetAllFilesInDir(dcaFolder)
 	stagingFiles := tools.GetAllFilesInDir(stagingFolder)
+	validCmds = nil
 
 	// Use this map to check whether we already have a given sound as dca
-	var dcaFilenames map[string]string = make(map[string]string, 0)
+	var dcaFilenames = make(map[string]string, 0)
 	for _, file := range dcaFiles {
 		splitStr := tools.SplitByNonWord(file)
 		filename := splitStr[len(splitStr) - 2]
@@ -293,15 +302,6 @@ func main() {
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
-
-	port := fmt.Sprintf(":%s", os.Getenv("PORT"))
-	if port == ":" {
-		port = ":8080"
-	}
-	err = http.ListenAndServe(port, nil)
-	if err != nil {
-		log.Fatal("ListenAndServe:", err)
-	}
 
 	// Close the session
 	dg.Close()
