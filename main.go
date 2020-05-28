@@ -5,12 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
+	"github.com/pmccau/rocket-mango/tools"
 	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"os/signal"
-	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -20,6 +19,8 @@ var token string
 var buffer = make([][]byte, 0)
 var validCmds map[string]string
 var count int
+var dcaFolder = "sounds/dca"
+var stagingFolder = "sounds/staging"
 
 // This function will be called (due to AddHandler above) when the bot receives
 // the "ready" event from Discord
@@ -30,7 +31,6 @@ func ready(s *discordgo.Session, event *discordgo.Ready) {
 // loadSound attempts to load an encoded sound file from disk.
 func loadSound(pathToFile string) error {
 
-	fmt.Println("Loading sound from", pathToFile)
 	file, err := os.Open(pathToFile)
 	if err != nil {
 		fmt.Println(err)
@@ -42,8 +42,6 @@ func loadSound(pathToFile string) error {
 	for {
 		// Read opus frame length from dca file
 		err = binary.Read(file, binary.LittleEndian, &opuslen)
-		fmt.Println(err)
-		fmt.Println(opuslen)
 		// If end of file, return
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
 			err := file.Close()
@@ -58,7 +56,6 @@ func loadSound(pathToFile string) error {
 			fmt.Println(err)
 			return err
 		}
-		fmt.Println("Read in", opuslen, "bytes")
 		// Read encoded pcm from dca file
 		InBuf := make([]byte, opuslen)
 		err = binary.Read(file, binary.LittleEndian, &InBuf)
@@ -81,26 +78,14 @@ func playSound(s *discordgo.Session, guildID, channelID string) (err error) {
 		return err
 	}
 
-	// Sleep for this amount of time before playing sound
-	// time.Sleep(250 * time.Millisecond)
-
 	// Start speaking
 	vc.Speaking(true)
 
-	//fmt.Printf("Buffer is of size: [%d][%d]")
-	// Send buffer data
-	//for i, buff := range buffer {
-	//	fmt.Printf("[%d]\tLength %d\n", i, len(buff))
-	//	vc.OpusSend <- buff
-	//}
-
-	for i := count; i < len(buffer); i++ {
+	// Send the data to the channel
+	for i := 0; i < len(buffer); i++ {
 		vc.OpusSend <- buffer[i]
 	}
-	count = len(buffer)
-
-	//vc.OpusSend <- buffer[count]
-	//count++
+	buffer = buffer[len(buffer):]
 
 	// Stop speaking
 	vc.Speaking(false)
@@ -122,7 +107,36 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	// Check for regex
+	// Check for newsound command, download attachment
+	if strings.HasPrefix(m.Content, "!newsound") {
+		fmt.Println("Attachments", m.Attachments)
+		for _, att := range m.Attachments {
+			splitStr := tools.SplitByNonWord(att.Filename)
+			filename := splitStr[len(splitStr) - 2]
+			if _, ok := validCmds[filename]; ok {
+				content := fmt.Sprintf("!%s is already a command!", filename)
+				s.ChannelMessageSend(m.ChannelID, content)
+			}
+
+			saveLocation := fmt.Sprintf("%s/%s", stagingFolder, att.Filename)
+			tools.DownloadFile(saveLocation, att.URL)
+			dcaLocation := tools.ConvertToDCA(saveLocation, dcaFolder)
+			RegisterCommand(filename, dcaLocation)
+		}
+	}
+
+	// Help message
+	if strings.HasPrefix(m.Content, "!help") {
+		keys := make([]string, 0)
+		for k := range validCmds {
+			keys = append(keys, k)
+		}
+		content := "You can ask me to play the following sounds:"
+		content = fmt.Sprintf("%s\n%s", content, strings.Join(keys, ", "))
+		s.ChannelMessageSend(m.ChannelID, content)
+	}
+
+	// Check for valid command
 	for k, v := range validCmds {
 		if strings.HasPrefix(m.Content, k) {
 			err := loadSound(v)
@@ -176,47 +190,17 @@ func guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 	}
 }
 
-// init does startup tasks for the bot
-func init() {
-	flag.StringVar(&token, "t", "", "Bot Token")
-	flag.Parse()
-}
-
-func readToken(pathToFile string) string {
-	contents, err := ioutil.ReadFile(pathToFile)
-	if err != nil {
-		panic(err)
-	}
-	return string(contents)
-}
-
-
-func CheckEncoding(entry string) string {
-	pattern := regexp.MustCompile(`\W`)
-	splitStr := pattern.Split(entry, -1)
-	ext := splitStr[len(splitStr) - 1]
-	filename := splitStr[len(splitStr) - 2]
-
-	if ext != "dca" {
-		cmd := fmt.Sprintf("ffmpeg -i %s -f s16le -ar 48000 -ac 2 pipe:1 | ./dca > ./sounds/%s.dca", entry, filename)
-		fmt.Println("CMD:", cmd)
-		_, err  := exec.Command("bash", "-c", cmd).Output()
-		if err != nil {
-			panic(err)
-			return "ERROR"
-		}
-		return fmt.Sprintf("./sounds/%s.dca", filename)
-	} else {
-		return entry
-	}
-}
-
+// RegisterCommand will add a command to the validCmds map with its associated sound clip
 func RegisterCommand(command string, file string) bool {
-	if _, ok := validCmds[command]; ok {
-		return false
+	if validCmds == nil {
+		validCmds = make(map[string]string, 0)
+	} else {
+		if _, ok := validCmds[command]; ok {
+			return false
+		}
 	}
 
-	location := CheckEncoding(file)
+	location := tools.CheckEncoding(file, dcaFolder)
 	if command[0] != '!' {
 		command = fmt.Sprintf("!%s", command)
 	}
@@ -224,18 +208,60 @@ func RegisterCommand(command string, file string) bool {
 	return true
 }
 
+// ParseExistingSounds will search the specified dcaFolder for any sound files to be added
+// as commands with a prepended !
+func ParseExistingSounds() int {
+	dcaFiles := tools.GetAllFilesInDir(dcaFolder)
+	stagingFiles := tools.GetAllFilesInDir(stagingFolder)
+
+	// Use this map to check whether we already have a given sound as dca
+	var dcaFilenames map[string]string = make(map[string]string, 0)
+	for _, file := range dcaFiles {
+		splitStr := tools.SplitByNonWord(file)
+		filename := splitStr[len(splitStr) - 2]
+		dcaFilenames[filename] = file
+	}
+
+	// Check for staged sounds that need to be converted. If it's already
+	// in there, skip it, otherwise convert
+	for _, file := range stagingFiles {
+		splitStr := tools.SplitByNonWord(file)
+		filename := splitStr[len(splitStr) - 2]
+		if _, ok := dcaFilenames[filename]; ok {
+			continue
+		}
+		tools.ConvertToDCA(file, dcaFolder)
+	}
+
+	// Refresh the dcaFiles, since we may have added some, then loop
+	// through and add them as commands
+	dcaFiles = tools.GetAllFilesInDir(dcaFolder)
+	for _, file := range dcaFiles {
+		splitStr := tools.SplitByNonWord(file)
+		filename := splitStr[len(splitStr) - 2]
+		RegisterCommand(filename, file)
+	}
+	fmt.Println("ValidCmds:", validCmds)
+	return len(dcaFiles)
+}
+
+// init does startup tasks for the bot
+func init() {
+	flag.StringVar(&token, "t", "", "Bot Token")
+	flag.Parse()
+}
+
 func main() {
-	token = readToken("creds.pickle")
 
-	validCmds = make(map[string]string, 0)
+	// Load in all existing sounds, as well as the token
+	ParseExistingSounds()
+	token, err := ioutil.ReadFile("creds.pickle")
+	if err != nil {
+		panic(err)
+	}
 
-	RegisterCommand("!airhorn", "./sounds/airhorn.dca")
-	RegisterCommand("!rocketman", "./sounds/rocket_man.dca")
-	RegisterCommand("!ROCKETMAN", "./sounds/ROCKETMAN.dca")
-
-	//fmt.Println("Valid cmds", validCmds)
-
-	dg, err := discordgo.New("Bot " + token)
+	// Initialize the bot and connect to the server
+	dg, err := discordgo.New("Bot " + string(token))
 	if err != nil {
 		panic(err)
 	}
@@ -256,7 +282,7 @@ func main() {
 	}
 
 	// Wait here until killed
-	fmt.Println("Airhorn now running.")
+	fmt.Println("rocket-mango is now running")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
