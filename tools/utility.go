@@ -42,6 +42,7 @@ func ConvertToDCA(pathToFile string, dcaFolder string) string {
 		panic(err)
 		return "ERROR"
 	}
+	os.Remove(pathToFile) // Delete the old file
 	return fmt.Sprintf("%s/%s.dca", dcaFolder, filename)
 }
 

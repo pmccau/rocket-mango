@@ -125,7 +125,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			dcaLocation := tools.ConvertToDCA(saveLocation, dcaFolder)
 			RegisterCommand(filename, dcaLocation)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Successfully added !%s", filename))
-			os.Remove(saveLocation)
 			fmt.Println("Deleted file at", saveLocation)
 		}
 	}
