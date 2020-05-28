@@ -8,6 +8,8 @@ import (
 	"github.com/pmccau/rocket-mango/tools"
 	"io"
 	"io/ioutil"
+	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -291,6 +293,15 @@ func main() {
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
+
+	port := fmt.Sprintf(":%s", os.Getenv("PORT"))
+	if port == ":" {
+		port = ":8080"
+	}
+	err = http.ListenAndServe(port, nil)
+	if err != nil {
+		log.Fatal("ListenAndServe:", err)
+	}
 
 	// Close the session
 	dg.Close()
