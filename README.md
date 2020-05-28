@@ -15,7 +15,7 @@ Commands from the !help response will be prepended with a `!`. Each will play a 
 ##### Uploading sound bytes for use on the fly: `!newsound`
 To add sounds to the sound library, upload the sound as an attachment with the comment `!newsound`. This will download the attachment, save it, parse to DCA format, then add it to the library with the command as the filename (less extension) prepended with an exclamation mark. If a filename overlaps with an existing command, it will be rejected.
 
-![Example of successful addition of new sound](https://github.com/pmccau/rocket-mango/blob/master/assets/upload-example.PNG)
+![Example of successful addition of new sound](https://github.com/pmccau/rocket-mango/blob/master/assets/upload-example-new.PNG)
 
 ### Notes
 
