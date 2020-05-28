@@ -8,7 +8,9 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"os/signal"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -22,7 +24,7 @@ var count int
 // This function will be called (due to AddHandler above) when the bot receives
 // the "ready" event from Discord
 func ready(s *discordgo.Session, event *discordgo.Ready) {
-	s.UpdateStatus(0, "!airhorn")
+	s.UpdateStatus(0, "!help for commands")
 }
 
 // loadSound attempts to load an encoded sound file from disk.
@@ -80,7 +82,7 @@ func playSound(s *discordgo.Session, guildID, channelID string) (err error) {
 	}
 
 	// Sleep for this amount of time before playing sound
-	time.Sleep(250 * time.Millisecond)
+	// time.Sleep(250 * time.Millisecond)
 
 	// Start speaking
 	vc.Speaking(true)
@@ -189,13 +191,49 @@ func readToken(pathToFile string) string {
 }
 
 
+func CheckEncoding(entry string) string {
+	pattern := regexp.MustCompile(`\W`)
+	splitStr := pattern.Split(entry, -1)
+	ext := splitStr[len(splitStr) - 1]
+	filename := splitStr[len(splitStr) - 2]
+
+	if ext != "dca" {
+		cmd := fmt.Sprintf("ffmpeg -i %s -f s16le -ar 48000 -ac 2 pipe:1 | ./dca > ./sounds/%s.dca", entry, filename)
+		fmt.Println("CMD:", cmd)
+		_, err  := exec.Command("bash", "-c", cmd).Output()
+		if err != nil {
+			panic(err)
+			return "ERROR"
+		}
+		return fmt.Sprintf("./sounds/%s.dca", filename)
+	} else {
+		return entry
+	}
+}
+
+func RegisterCommand(command string, file string) bool {
+	if _, ok := validCmds[command]; ok {
+		return false
+	}
+
+	location := CheckEncoding(file)
+	if command[0] != '!' {
+		command = fmt.Sprintf("!%s", command)
+	}
+	validCmds[command] = location
+	return true
+}
+
 func main() {
 	token = readToken("creds.pickle")
 
 	validCmds = make(map[string]string, 0)
-	validCmds["!airhorn"] = "./sounds/airhorn.dca"
-	validCmds["!rocketman"] = "./sounds/rocketman0.dca"
-	validCmds["!ROCKETMAN"] = "./sounds/rocketman1.dca"
+
+	RegisterCommand("!airhorn", "./sounds/airhorn.dca")
+	RegisterCommand("!rocketman", "./sounds/rocket_man.dca")
+	RegisterCommand("!ROCKETMAN", "./sounds/ROCKETMAN.dca")
+
+	//fmt.Println("Valid cmds", validCmds)
 
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
@@ -221,7 +259,7 @@ func main() {
 	fmt.Println("Airhorn now running.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
-	<- sc
+	<-sc
 
 	// Close the session
 	dg.Close()
