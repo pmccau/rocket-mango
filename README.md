@@ -1,7 +1,9 @@
 # rocket-mango
-![rocket-mango-logo](https://github.com/pmccau/rocket-mango/blob/master/assets/mango-small.png)
+
 ### Overview
 This is a Discord Bot built using [DiscordGo](https://github.com/bwmarrin/discordgo). It was built on top of the existing [Airhorn example](https://github.com/bwmarrin/discordgo/tree/master/examples/airhorn) and leverages the [DCA file format](https://github.com/bwmarrin/dca).
+
+![rocket-mango-logo](https://github.com/pmccau/rocket-mango/blob/master/assets/mango-small.png)
 
 ### Functions
 ##### Get current commands: `!help`
