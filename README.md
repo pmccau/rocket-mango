@@ -20,4 +20,5 @@ To add sounds to the sound library, upload the sound as an attachment with the c
 1. Make sure you have [ffmpeg](https://www.ffmpeg.org/download.html) installed
 2. Download [DCA file format](https://github.com/bwmarrin/dca) or use `dca.exe` from this repo
 3. If you downloaded the DCA repo, build it by navigating to the folder and running `go build`. You should now have a dca.exe
-4. Run the following command. Replace the `test.m4a` and `test.dca` as needed. `ffmpeg -i test.m4a -f s16le -ar 48000 -ac 2 pipe:1 | ./dca > test.dca`
+4. Run the following command. Replace the `test.m4a` and `test.dca` as needed. 
+`ffmpeg -i test.m4a -f s16le -ar 48000 -ac 2 pipe:1 | ./dca > test.dca`
