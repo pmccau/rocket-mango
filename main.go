@@ -255,9 +255,14 @@ func main() {
 
 	// Load in all existing sounds, as well as the token
 	ParseExistingSounds()
-	token, err := ioutil.ReadFile("creds.pickle")
-	if err != nil {
-		panic(err)
+	var token []byte
+	if _, err := os.Stat("creds.pickle"); os.IsNotExist(err) {
+		token = []byte(os.Getenv("TOKEN"))
+	} else {
+		token, err = ioutil.ReadFile("creds.pickle")
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	// Initialize the bot and connect to the server
