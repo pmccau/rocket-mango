@@ -32,7 +32,8 @@ func ConvertToDCA(pathToFile string, dcaFolder string) string {
 	splitStr := SplitByNonWord(pathToFile)
 	filename := splitStr[len(splitStr) - 2]
 
-	cmd := fmt.Sprintf("ffmpeg -i %s -f s16le -ar 48000 -ac 2 pipe:1 | ./dca > %s/%s.dca",
+	// ffmpeg -i input.wav -filter:a loudnorm output.wav
+	cmd := fmt.Sprintf("ffmpeg -i %s -filter:a loudnorm -f s16le -ar 48000 -ac 2 pipe:1 | ./dca > %s/%s.dca",
 		pathToFile,
 		dcaFolder,
 		filename)

@@ -22,6 +22,7 @@ var validCmds map[string]string
 var count int
 var dcaFolder = "sounds/dca"
 var stagingFolder = "sounds/staging"
+var lock bool // semaphore
 
 // This function will be called (due to AddHandler above) when the bot receives
 // the "ready" event from Discord
@@ -103,6 +104,12 @@ func playSound(s *discordgo.Session, guildID, channelID string) (err error) {
 // This function will be called (due to AddHandler above) every time a new
 // message is created on any channel that the autenticated bot has access to.
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+	// Exit if busy
+	if lock {
+		fmt.Println("EXITING: LOCKED")
+		return
+	}
+
 	// Ignore messages from the bot
 	if m.Author.ID == s.State.User.ID {
 		return
@@ -111,7 +118,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// Check for newsound command, download attachment
 	if strings.HasPrefix(m.Content, "!newsound") {
 		ParseExistingSounds() // Redo the parsing to be sure it's current, no deletions
-		fmt.Println("Attachments", m.Attachments)
 		for _, att := range m.Attachments {
 			splitStr := tools.SplitByNonWord(att.Filename)
 			filename := splitStr[len(splitStr) - 2]
@@ -125,7 +131,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			dcaLocation := tools.ConvertToDCA(saveLocation, dcaFolder)
 			RegisterCommand(filename, dcaLocation)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Successfully added !%s", filename))
-			fmt.Println("Deleted file at", saveLocation)
 		}
 	}
 
@@ -136,52 +141,57 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		for k := range validCmds {
 			keys = append(keys, k)
 		}
-		content := "You can ask me to play the following sounds:"
+		content := "You can ask me to play the following sounds:\n"
 		sort.Strings(keys)
 
-		content = fmt.Sprintf("%s\n%s", content, strings.Join(keys, ", "))
+		content = fmt.Sprintf("%s\n%s\n\nTo add a new command and sound, click the plus sign to the left of your chat box in the channel, select a sound byte, then add the comment '!newsound'. The new command will be whatever the name of the file is less the extension", content, strings.Join(keys, ", "))
 		s.ChannelMessageSend(m.ChannelID, content)
 	}
 
 	// Check for valid command
-	for k, v := range validCmds {
-		if strings.HasPrefix(m.Content, k) {
-			ParseExistingSounds() // Redo the parsing to be sure it's current, no deletions
+	if val, ok := validCmds[m.Content]; ok {
+		ParseExistingSounds() // Redo the parsing to be sure it's current, no deletions
+		lock = true
 
-			err := loadSound(v)
-			if err != nil {
-				panic(err)
-			}
+		err := loadSound(val)
+		if err != nil {
+			lock = false
+			panic(err)
+		}
 
-			// Find channel
-			c, err := s.State.Channel(m.ChannelID)
-			if err != nil {
-				// Couldn't find channel
-				panic(err)
-				return
-			}
+		// Find channel
+		c, err := s.State.Channel(m.ChannelID)
+		if err != nil {
+			// Couldn't find channel
+			lock = false
+			panic(err)
+			return
+		}
 
-			// Find guild for that channel
-			g, err := s.State.Guild(c.GuildID)
-			if err != nil {
-				// Couldn't find guild
-				panic(err)
-				return
-			}
+		// Find guild for that channel
+		g, err := s.State.Guild(c.GuildID)
+		if err != nil {
+			// Couldn't find guild
+			lock = false
+			panic(err)
+			return
+		}
 
-			// Look for message sender in guild's current voice states
-			for _, vs := range g.VoiceStates {
-				if vs.UserID == m.Author.ID {
-					err = playSound(s, g.ID, vs.ChannelID)
-					if err != nil {
-						panic(err)
-						return
-					}
+		// Look for message sender in guild's current voice states
+		for _, vs := range g.VoiceStates {
+			if vs.UserID == m.Author.ID {
+				err = playSound(s, g.ID, vs.ChannelID)
+				if err != nil {
+					lock = false
+					panic(err)
 					return
 				}
+				lock = false
+				return
 			}
 		}
 	}
+	lock = false
 }
 
 // This function will be called (due to AddHandler above) every time a new
@@ -193,7 +203,7 @@ func guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 
 	for _, channel := range event.Guild.Channels {
 		if channel.ID == event.Guild.ID {
-			_, _ = s.ChannelMessage(channel.ID, "Airhorn is ready! Type !airhorn while in a voice channelt o play a sound")
+			_, _ = s.ChannelMessage(channel.ID, "rocket-mango is ready. Type !help for more information")
 			return
 		}
 	}
@@ -251,7 +261,6 @@ func ParseExistingSounds() int {
 		filename := splitStr[len(splitStr) - 2]
 		RegisterCommand(filename, file)
 	}
-	fmt.Println("ValidCmds:", validCmds)
 	return len(dcaFiles)
 }
 
