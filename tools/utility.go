@@ -3,6 +3,7 @@ package tools
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -41,6 +42,7 @@ func ConvertToDCA(pathToFile string, dcaFolder string) string {
 	_, err  := exec.Command("bash", "-c", cmd).Output()
 	if err != nil {
 		panic(err)
+		log.Println("ERROR CODE 21:", err)
 		return "ERROR"
 	}
 	os.Remove(pathToFile) // Delete the old file
@@ -65,6 +67,7 @@ func GetAllFilesInDir(pathToDir string) []string {
 		return nil
 	})
 	if err != nil {
+		log.Println("ERROR CODE 22:", err)
 		panic(err)
 	}
 	return files

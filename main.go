@@ -8,6 +8,7 @@ import (
 	"github.com/pmccau/rocket-mango/tools"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/signal"
 	"sort"
@@ -156,6 +157,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		err := loadSound(val)
 		if err != nil {
 			lock = false
+			log.Println("ERROR CODE 11:", err)
 			panic(err)
 		}
 
@@ -164,6 +166,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if err != nil {
 			// Couldn't find channel
 			lock = false
+			log.Println("ERROR CODE 12:", err)
 			panic(err)
 			return
 		}
@@ -173,6 +176,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if err != nil {
 			// Couldn't find guild
 			lock = false
+			log.Println("ERROR CODE 13:", err)
 			panic(err)
 			return
 		}
@@ -183,6 +187,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 				err = playSound(s, g.ID, vs.ChannelID)
 				if err != nil {
 					lock = false
+					log.Println("ERROR CODE 14:", err)
 					panic(err)
 					return
 				}
@@ -211,6 +216,7 @@ func guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 
 // RegisterCommand will add a command to the validCmds map with its associated sound clip
 func RegisterCommand(command string, file string) bool {
+	log.Println("Registering new command", command, "from file", file)
 	if validCmds == nil {
 		validCmds = make(map[string]string, 0)
 	} else {
@@ -224,6 +230,7 @@ func RegisterCommand(command string, file string) bool {
 		command = fmt.Sprintf("!%s", command)
 	}
 	validCmds[command] = location
+	log.Println(" > Success")
 	return true
 }
 
@@ -271,6 +278,14 @@ func init() {
 }
 
 func main() {
+	// Initialize logging
+	file, err := os.OpenFile("info.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+	log.SetOutput(file)
+
 
 	// Load in all existing sounds, as well as the token
 	ParseExistingSounds()
@@ -280,6 +295,7 @@ func main() {
 	} else {
 		token, err = ioutil.ReadFile("creds.pickle")
 		if err != nil {
+			log.Println("ERROR CODE 01:", err)
 			panic(err)
 		}
 	}
@@ -287,6 +303,7 @@ func main() {
 	// Initialize the bot and connect to the server
 	dg, err := discordgo.New("Bot " + string(token))
 	if err != nil {
+		log.Println("ERROR CODE 02:", err)
 		panic(err)
 	}
 
@@ -302,6 +319,7 @@ func main() {
 	// Open websocket, begin listening
 	err = dg.Open()
 	if err != nil {
+		log.Println("ERROR CODE 03:", err)
 		panic(err)
 	}
 
