@@ -151,6 +151,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	// Check for valid command
 	if val, ok := validCmds[m.Content]; ok {
+		log.Println("Responding to command:", m.Content, "from user:", m.Author)
 		ParseExistingSounds() // Redo the parsing to be sure it's current, no deletions
 		lock = true
 
